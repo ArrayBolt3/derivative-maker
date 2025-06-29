@@ -1,6 +1,6 @@
 ![o,age](https://i.postimg.cc/1tvBZfYQ/prototypes.png)
 
-With the convenience of a debian:bookworm docker container, `derivative-maker-docker` automatically verifies tags, updates source code and builds Whonix/Kicksecure images, incorporating the official derivative-maker build scripts, while including environment variables and intuitive ways to customize every available build option, container behavior and final build command. Additionally, log files of the entire build, git and key verification process are automatically generated. All necessary files already ship with the current derivative-maker source code, allowing for quick and simple deployment with a variety of pre-defined user scripts.
+With the convenience of a debian:bookworm docker container, `derivative-maker-docker` builds Whonix/Kicksecure images, incorporating the official derivative-maker build scripts, while including environment variables and intuitive ways to customize every available build option, container behavior and final build command. Additionally, log files of the entire build, git and key verification process are automatically generated. All necessary files already ship with the current derivative-maker source code, allowing for quick and simple deployment with a variety of pre-defined user scripts.
 
 ## Roadmap
 - [x] Read documentation
@@ -19,7 +19,7 @@ With the convenience of a debian:bookworm docker container, `derivative-maker-do
 | --------------------------------------------------| -------------------------|------------|
 | derivative-maker-docker-setup | Prepares minimal debian env in the docker image | container:/usr/bin
 | derivative-maker-docker-run| Creates volumes and starts the container | host:derivative-maker/docker
-| derivative-maker-docker-start| Verifies tag and executes any given build command  | container:/usr/bin
+| derivative-maker-docker-start| Executes any given build command  | container:/usr/bin
 | entrypoint.sh | Initializes systemd and allows services to be started | container:/usr/bin
 
 ## Usage
@@ -37,18 +37,16 @@ With the convenience of a debian:bookworm docker container, `derivative-maker-do
     ```sh
     docker images
     ```
-  + Trigger re-creation by deleting the current image
-    ```
-    docker rmi -f derivative-maker/derivative-maker-docker:latest
-    ```
 ### Volumes
-1. By default 2 folders are generated in the user's home directory
+1. By default, three folders are generated in the user's home directory
    ```sh
    BINARY_VOLUME="$HOME/binary_mnt"
    CACHER_VOLUME="$HOME/approx_cache_mnt"
+   KEY_VOLUME="$HOME/.key_mnt"
    ```
   + `BINARY_VOLUME` is the location of build artifacts and logs
-  + `CACHER_VOLUME` is the mount point of the container's `/var/cache/apt-cacher-ng`
+  + `CACHER_VOLUME` is the mount point of the container's `/var/cache/approx-derivative-maker`
+  + `KEY_VOLUME` is the mount point of the container's `/home/user/.gnupg`
 2. To change folder names or locations use the container param `--mount`
 ### Container parameters
 - [x] Choose container parameters
@@ -56,19 +54,20 @@ With the convenience of a debian:bookworm docker container, `derivative-maker-do
 
 |  Option     | Description              | Sample Value
 | ------------| -------------------------|------------|
-| `--tag`, `-t` | Build a specific tag of your choosing | 17.3.9.9-stable
-| `--build-step`, `-b` | Allow execution of a specifc build-step |2800_create-lb-iso
+| `--build-step`, `-b` | Allow execution of a specifc build-step | 2800_create-lb-iso
 | `--custom`, `-c` | Run a custom command inside the container | /bin/bash
-| `--git`, `-g`| Skip git pull to preserve current state  | none
-| `--mount`, `-m`| Choose custom volume mount points  | /home/user/whonix
+| `--rebuild-container` | Rebuilds the container if it exists already | none
+| `--binary-mount` | Changes the binary artifact directory | ${HOME}/binary_mnt
+| `--cacher-mount` | Changes the package cache directory | ${HOME}/approx_cache_mnt
+| `--key-mount` | Changes the container's keystore directory | ${HOME}/.key_mnt
 #### Sample Commands
-1. Build with a custom tag
+1. Build a Kicksecure-Xfce ISO image
    ```sh
-   ./derivative-maker-docker-run -t 17.3.9.9-stable -- <build arguments>
+   ./derivative-maker-docker-run -- --flavor kicksecure-xfce --target iso --repo true --arch amd64
    ```
 2. Execute specific build-steps
    ```sh
-   ./derivative-maker-docker-run -t 17.3.9.9-stable -b 2800_create-lb-iso -- <build arguments>
+   ./derivative-maker-docker-run -b 2800_create-lb-iso -- <build arguments>
    ```
 3. Running a custom command
    ```sh
@@ -76,12 +75,9 @@ With the convenience of a debian:bookworm docker container, `derivative-maker-do
    ```
 4. Choose custom volume mount points
    ```sh
-   ./derivative-maker-docker-run -t 17.3.9.9-stable -m /home/user/whonix /home/user/apt-cache -- <build arguments>
+   ./derivative-maker-docker-run --binary-mount /home/user/whonix --cacher-mount /home/user/apt-cache -- <build arguments>
    ```
-  + The first argument denotes the binary volume while the second refers to apt-cacher
 #### Hints
-* Without usage of `--tag`, the latest tag is automatically chosen
-* `--tag master` is possible and builds directly from master branch
 * Multiple custom commands can be chained with `&&` or `;`
 * Using end of options `--` is recommended
 ### Build Command

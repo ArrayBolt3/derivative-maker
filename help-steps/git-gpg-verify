@@ -1,5 +1,6 @@
 #!/bin/bash
 
+## Copyright (C) 2025 tabletseeker <148603424+tabletseeker@users.noreply.github.com>
 ## Copyright (C) 2012 - 2025 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
 
@@ -20,33 +21,36 @@ source variables
 
 cd -- "$(dirname -- "$MYDIR")"
 
-import_key() {
-  local derivative_signing_key_fingerprint_item
-  for derivative_signing_key_fingerprint_item in "${derivative_signing_key_fingerprint_list[@]}"; do
-    if ! gpg --quiet --list-keys -- "${derivative_signing_key_fingerprint_item}" &>/dev/null; then
-      missing_key=true
-    fi
+import_keys() {
+  local key_index derivative_signing_key_fingerprint_list derivative_signing_public_key_item derivative_signing_key_fingerprint_item
+
+  for key_index in "${!derivative_signing_public_key_list[@]}"; do
+    readarray -t derivative_signing_key_fingerprint_list <<< "${derivative_signing_key_fingerprint_group_list[key_index]}"
+    derivative_signing_public_key_item="${derivative_signing_public_key_list[key_index]}"
+
+    for derivative_signing_key_fingerprint_item in "${derivative_signing_key_fingerprint_list[@]}"; do
+      if ! gpg --quiet --list-keys -- "${derivative_signing_key_fingerprint_item}" &>/dev/null; then
+        gpg --keyid-format long --import --import-options show-only --with-fingerprint -- "${derivative_signing_public_key_item}"
+        gpg --import -- "${derivative_signing_public_key_item}"
+        gpg --check-sigs -- "${derivative_signing_key_fingerprint_item}"
+        break
+      fi
+    done
   done
-
-  if [ ! "${missing_key}" = "true" ]; then
-    return 0
-  fi
-
-  for derivative_signing_public_key_item in "${derivative_signing_public_key_list[@]}"; do
-    gpg --keyid-format long --import --import-options show-only --with-fingerprint -- "${derivative_signing_public_key_item}"
-    gpg --import -- "${derivative_signing_public_key_item}"
-    gpg --check-sigs -- "${derivative_signing_public_key_item}"
-  fi
 }
 
 signed_by_fingerprint() {
-  local fingerprint derivative_signing_key_fingerprint_item
+  local fingerprint derivative_signing_key_fingerprint_group derivative_signing_key_fingerprint_item derivative_signing_key_fingerprint_list
   fingerprint=$(git show --no-patch --pretty=format:%GF "${1}")
 
-  for derivative_signing_key_fingerprint_item in "${derivative_signing_key_fingerprint_list[@]}"; do
-    if [ "${fingerprint}" = "${derivative_signing_key_fingerprint_item}" ]; then
-      return 0
-    fi
+  for derivative_signing_key_fingerprint_group in "${derivative_signing_key_fingerprint_group_list[@]}"; do
+    readarray -t derivative_signing_key_fingerprint_list <<< "${derivative_signing_key_fingerprint_group}"
+
+    for derivative_signing_key_fingerprint_item in "${derivative_signing_key_fingerprint_list[@]}"; do
+      if [ "${fingerprint}" = "${derivative_signing_key_fingerprint_item}" ]; then
+        return 0
+      fi
+    done
   done
 
   error "Signing key fingerprint does not match!"
@@ -59,39 +63,41 @@ run_git() {
     error "Do not run this as root!"
   fi
 
-  ## TODO: review
-  ## - security
-  ## - avoid developer loss of progress
-  return 0
+  if [ -n "${UPDATE_REPO}" ]; then
+    "${dist_source_help_steps_folder}/git_sanity_test"
 
-  [ -z "${GIT}" ] || git pull
+    git pull
+    git fetch --tags --depth=1
 
-  git fetch --tags --depth=1
+    latest_git_tag="$(git rev-list --tags --max-count=1)"
 
-  latest_git_tag="$(git rev-list --tags --max-count=1)"
+    [ -z "${TAG}" ] && TAG="$(git describe --tags "${latest_git_tag}")"
 
-  [ -n "${TAG}" ] || TAG="$(git describe --tags "${latest_git_tag}")"
+    if [ "${TAG}" != "master" ]; then
+      git verify-tag "${TAG}"
+      git describe "${TAG}"
+    fi
 
-  if [ "${TAG}" != "master" ]; then
-    git verify-tag "${TAG}"
-    git describe "${TAG}"
+    git verify-commit "${TAG}^{commit}"
+
+    signed_by_fingerprint "${TAG}^{commit}"
+
+    git checkout "${TAG}"
+
+    git submodule sync --recursive >/dev/null
+
+    git -c merge.verifySignatures=true submodule update --init --recursive --jobs=200 --merge >/dev/null
+
+    git status
   fi
-
-  git verify-commit "${TAG}^{commit}"
-
-  signed_by_fingerprint "${TAG}^{commit}"
-
-  git checkout "${TAG}"
-
-  git submodule sync --recursive >/dev/null
-
-  git -c merge.verifySignatures=true submodule update --init --recursive --jobs=200 --merge >/dev/null
-
-  git status
 }
 
 main() {
-  import_key 2>&1 | tee -a -- "${HOME}/derivative-binary/logs/key.log"
+  ## TODO: Disabled for now, code should be repurposed as possible for a
+  ## dedicated updater script.
+  return 0
+
+  import_keys 2>&1 | tee -a -- "${HOME}/derivative-binary/logs/key.log"
   run_git 2>&1 | tee -a -- "${HOME}/derivative-binary/logs/git.log"
 }
 
