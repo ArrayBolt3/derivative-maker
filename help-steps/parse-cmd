@@ -130,7 +130,7 @@ Environment Variables:
       DERIVATIVE_APT_REPOSITORY_OPTS='--enable --repository stable'
       DERIVATIVE_APT_REPOSITORY_OPTS='--enable --repository testers'
       DERIVATIVE_APT_REPOSITORY_OPTS='--enable --repository developers'
-      DERIVATIVE_APT_REPOSITORY_OPTS='--enable --codename bookworm'
+      DERIVATIVE_APT_REPOSITORY_OPTS='--enable --codename trixie'
 
    - vm_names_to_be_exported: Specify for unified images which images to combine.
     Default:
@@ -154,7 +154,7 @@ Advanced Options:
   --kernel [packages]             : Specify kernel packages (e.g., 'linux-image-amd64' or 'none').
   --headers [packages]            : Specify kernel header packages.
   --remote-derivative-packages    : Choose to use remote derivative packages instead of building derivative packages from source code. (default: false).
-  --release [unsupported_option]  : Set release option (unsupported). (bookworm|xenial|bionic)
+  --release [unsupported_option]  : Set release option (unsupported). (trixie|bookworm|xenial|bionic)
   --arch [architecture]           : Set architecture (e.g., i386, amd64, kfreebsd-i386, kfreebsd-amd64) (default: amd64).
   (Note: amd64 also works with most Intel CPUs.)
   --debug                         : Does not disable verbose/debug (xtrace) during help-steps pre, variables and parse-cmd.

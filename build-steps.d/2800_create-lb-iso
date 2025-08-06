@@ -181,7 +181,7 @@ lb config noauto \\
 
    ## Apt archives
    mkdir --parents -- archives
-   printf '%s\n' "deb http://127.0.0.1:9977/debian-fasttrack/ ${dist_build_apt_stable_release}-fasttrack main contrib" | sponge -- archives/fasttrack.list.chroot
+   printf '%s\n' "deb [signed-by=/usr/share/keyrings/fasttrack-archive-keyring.gpg] http://127.0.0.1:9977/debian-fasttrack/ ${dist_build_apt_stable_release}-fasttrack main contrib" | sponge -- archives/fasttrack.list.chroot
    if [ "${build_remote_derivative_pkgs}" = 'true' ]; then
       printf '%s\n' "$sources_list_build_remote_derivative" | sponge -- archives/derivative-temp.list.chroot
       cp -- "${source_code_folder_dist}/packages/kicksecure/repository-dist/usr/share/keyrings/derivative.asc" archives/derivative-temp.key.chroot

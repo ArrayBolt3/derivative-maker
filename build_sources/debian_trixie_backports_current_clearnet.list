@@ -1,7 +1,7 @@
 ## Copyright (C) 2012 - 2025 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
 
-## Using specific codenames (for example: "bookworm") rather than generic code
+## Using specific codenames (for example: "trixie") rather than generic code
 ## names (for example: "stable") because grml-debootstrap did not support
 ## generic code names for --release. See also:
 ## github.com/grml/grml-debootstrap/issues/37
@@ -10,5 +10,5 @@
 
 ## Added deb-src so source package can also be downloaded.
 
-deb http://127.0.0.1:9977/debian bookworm-backports main contrib non-free non-free-firmware
-deb-src http://127.0.0.1:9977/debian bookworm-backports main contrib non-free non-free-firmware
+deb http://127.0.0.1:9977/debian trixie-backports main contrib non-free non-free-firmware
+deb-src http://127.0.0.1:9977/debian trixie-backports main contrib non-free non-free-firmware

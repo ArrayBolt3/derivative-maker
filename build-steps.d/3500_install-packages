@@ -265,6 +265,12 @@ install-packages() {
       error "ERROR: Invalid dist_build_type_short '$dist_build_type_short'. Please report this bug!"
    fi
 
+   ## Install mate-polkit before we install anything GUI-related, since
+   ## otherwise ukui-polkit will attempt to insert itself into the image
+   if [ "$dist_build_desktop" = 'Xfce' ]; then
+     pkg-install mate-polkit
+   fi
+
    "$dist_source_help_steps_folder/unchroot-raw" "$@"
 
    ## }}
@@ -348,7 +354,6 @@ $dist_build_script_skip_package_install${reset}"
       ## See also build-steps.d/*_create-debian-packages function
       ## download_virtualbox_packages_from_debian_sid
 
-      ## At time of writing, available for architectures amd64 i386 only.
       if [ "$dist_build_target_arch" = "amd64" ] || [ "$dist_build_target_arch" = "i386" ]; then
          pkg-add-to-install-list virtualbox-guest-utils
          pkg-add-to-install-list virtualbox-guest-x11
