@@ -1,3 +1,27 @@
+derivative-maker (3:17.4.4.3-1) unstable; urgency=medium
+
+  * New upstream version (local package).
+
+ -- Patrick Schleizer <adrelanos@whonix.org>  Thu, 07 Aug 2025 10:06:14 +0000
+
+derivative-maker (3:17.4.4.2-1) unstable; urgency=medium
+
+  * New upstream version (local package).
+
+ -- Patrick Schleizer <adrelanos@whonix.org>  Thu, 07 Aug 2025 07:46:03 +0000
+
+derivative-maker (3:17.4.4.1-1) unstable; urgency=medium
+
+  * New upstream version (local package).
+
+ -- Patrick Schleizer <adrelanos@whonix.org>  Thu, 07 Aug 2025 07:09:45 +0000
+
+derivative-maker (3:17.4.4.0-1) unstable; urgency=medium
+
+  * New upstream version (local package).
+
+ -- Patrick Schleizer <adrelanos@whonix.org>  Wed, 06 Aug 2025 10:19:53 +0000
+
 derivative-maker (3:17.4.3.9-1) unstable; urgency=medium
 
   * New upstream version (local package).
