@@ -404,7 +404,7 @@ dist_build_one_parse_cmd() {
                ;;
            ## TODO
            --testing-frozen-sources)
-               export dist_build_sources_list_primary="build_sources/debian_testing_frozen.list"
+               export dist_build_sources_list_primary="build_sources/debian_testing_frozen.sources"
                shift
                ;;
            --debug)

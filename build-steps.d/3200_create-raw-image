@@ -48,11 +48,13 @@ create-debian-raw-image() {
    true "${cyan}INFO: dist_build_target_arch set to: $dist_build_target_arch${reset}"
 
    $SUDO_TO_ROOT mkdir --parents "/etc/debootstrap/etc/apt/"
-   $SUDO_TO_ROOT cp "$dist_build_sources_list_primary" "/etc/debootstrap/etc/apt/sources.list"
+   ## TODO: Not sure if this is going to be valid syntax once deb822 support
+   ## is added to grml-debootstrap
+   $SUDO_TO_ROOT cp "$dist_build_sources_list_primary" "/etc/debootstrap/etc/apt/sources.list.d/derivative.sources"
 
    ## Info.
-   true "${cyan}INFO: Using the following /etc/apt/sources.list for grml-debootstrap: ${reset}"
-   $SUDO_TO_ROOT cat "/etc/debootstrap/etc/apt/sources.list"
+   true "${cyan}INFO: Using the following /etc/apt/sources.list.d/derivative.sources for grml-debootstrap: ${reset}"
+   $SUDO_TO_ROOT cat "/etc/debootstrap/etc/apt/sources.list.d/derivative.sources"
 
    ## TODO
    ## /etc/resolv.conf of host leaks into image.
@@ -154,8 +156,8 @@ create-debian-raw-image() {
    ## - Cannot be combined with mmdebstrap.
    ## - Cannot bootstrap from multiple (regular and security) repositories
    ##   at the same time aka "multistrap".
-   ## - Does not support APT sources in a sources.list file such as for example
-   ##   build_sources/debian_stable_current_clearnet.list
+   ## - Does not support APT sources in a sources  file such as for example
+   ##   build_sources/debian_stable_current_clearnet.sources
    ##   (variable: dist_build_sources_list_primary)
    ##   but requires an APT URI such as for example.
    ##   http://HTTPS///deb.debian.org/debian

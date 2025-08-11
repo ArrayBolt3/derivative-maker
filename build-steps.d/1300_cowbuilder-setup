@@ -143,9 +143,11 @@ cowbuilder_setup_do() {
       ## unfortunately runs function `installaptlines` after `${DEBOOTSTRAP}`,
       ## which uses a different sources list. This pbuilder hook script restores
       ## derivative-maker build APT sources list.
+      ## TODO: Not sure if this is the right way to do this for the deb822
+      ## format?
       true "INFO: Sanity test. Security critical. Comparing derivative-maker build sources list with chroot sources list."
-      $SUDO_TO_ROOT diff -- "$dist_build_sources_list_primary" "$base_folder/etc/apt/sources.list"
-      $SUDO_TO_ROOT cp -- "$dist_build_sources_list_primary" "$base_folder/etc/apt/sources.list"
+      $SUDO_TO_ROOT diff -- "$dist_build_sources_list_primary" "$base_folder/etc/apt/sources.list.d/derivative.sources"
+      $SUDO_TO_ROOT cp -- "$dist_build_sources_list_primary" "$base_folder/etc/apt/sources.list.d/derivative.sources"
 
       $SUDO_TO_ROOT mkdir --parents -- "$base_folder/home/$user_name"
       $SUDO_TO_ROOT cp -- "$dist_build_pbuilder_config_file" "$base_folder/home/$user_name/pbuilder_config_file"
