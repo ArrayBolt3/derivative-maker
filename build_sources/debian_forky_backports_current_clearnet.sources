@@ -10,5 +10,9 @@
 
 ## Added deb-src so source package can also be downloaded.
 
-deb http://127.0.0.1:9977/debian trixie-backports main contrib non-free non-free-firmware
-deb-src http://127.0.0.1:9977/debian trixie-backports main contrib non-free non-free-firmware
+Types: deb deb-src
+URIs: http://127.0.0.1:9977/debian
+Suites: forky-backports
+Components: main contrib non-free non-free-firmware
+Enabled: yes
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

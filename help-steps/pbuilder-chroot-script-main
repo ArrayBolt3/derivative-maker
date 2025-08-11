@@ -42,7 +42,7 @@ if [ "$dist_build_unsafe_io" = "true" ]; then
 fi
 
 ## Debugging.
-cat -- /etc/apt/sources.list
+cat -- /etc/apt/sources.list.d/debian.sources || true
 
 if test -f /var/lib/dpkg/available ; then
   true "INFO: /var/lib/dpkg/available exists."
