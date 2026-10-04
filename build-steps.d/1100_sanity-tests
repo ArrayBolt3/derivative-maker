@@ -1,36 +1,27 @@
-#!/bin/bash
+#!/bin/bash -e
 
-## Copyright (C) 2012 - 2025 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
+## Copyright (C) 2012 - 2026 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
 
-set -x
-set -o errexit
-set -o nounset
-set -o pipefail
-set -o errtrace
-shopt -s inherit_errexit
-shopt -s shift_verbose
-export LC_ALL=C
+## errexit on the shebang (direct run only; ignored when sourced) so a failed
+## 'source' below aborts before main() sets the full strict block.
 
 ## style-ok: no-safe-rm -- this is the sanity/bootstrap step that installs safe-rm.
 ## style-ok: allow-echo -- the only 'echo' occurrences are inside strings.
 
-true "INFO: Currently running script: ${BASH_SOURCE[0]} $*"
-
-MYDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-cd "${MYDIR}"
-cd ..
-cd help-steps
-
-source pre
-source variables
-
-cd "${MYDIR}"
-cd ..
-
-# shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/has.bsh
-source "${HELPER_SCRIPTS_PATH:-}"/usr/libexec/helper-scripts/has.bsh
+## Source-able: a dist-ai unit test sources this file to call the check-* functions
+## directly (with stubbed SUDO_TO_ROOT / losetup / CHROOT_FOLDER), without running
+## the build step or inheriting strict-mode. was_executed gates the auto-run; the
+## build-env setup (pre / variables, which set HELPER_SCRIPTS_PATH) lives in main(),
+## not at source time -- so this bootstrap source cannot rely on HELPER_SCRIPTS_PATH
+## being set yet. Self-locate the in-tree submodule from this file's own path (as
+## help-steps/pre does), so it resolves whether executed as a build step or sourced
+## by a test, with or without a system-installed helper-scripts.
+# shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/check_runtime.bsh
+if ! source "$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" && pwd )/../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/check_runtime.bsh" ; then
+  printf '%s\n' "$0: ERROR: cannot source check_runtime.bsh!" >&2
+  exit 1
+fi
 
 test-wc() {
    if ! printf '%s\n' "" | wc -l >/dev/null ; then
@@ -46,10 +37,9 @@ https://github.com/rspamd/rspamd/issues/5137"
 check-redistributable-builds-requirements() {
    local folder_list folder_item
 
-   ## '~/.gnupg' is required as at least an empty folder for the Qubes
-   ## 'split-gpg-2' bug. Auto-create unconditionally; this is independent
-   ## of the redistributable folder check below.
-   mkdir --parents -- "${HOME}/.gnupg"
+   ## '~/.gnupg' (empty folder for the Qubes split-gpg-2 gpg-agent routing) is
+   ## created by help-steps/signing-key-create / signing-key-test, co-located with
+   ## the 'sq' signing calls that actually need it -- not here.
 
    ## Skip the rest for non-redistributable dev builds: '$dist_build_redistributable=false'
    ## means 'help-steps/signing_key' auto-generates keys (see
@@ -203,41 +193,6 @@ The user must fix this issue before proceeding. These issue is most likely not c
    true
 }
 
-check-hostname() {
-   ## mmdebstrap requires file '/etc/hostname' to exist.
-   if ! test -f /etc/hostname ; then
-      local local_hostname
-      if ! local_hostname="$(hostname)" ; then
-         error "${bold}${red}ERROR ${BASH_SOURCE[0]}: Running command 'hostname' failed. See above.${reset}"
-      fi
-      if [ "${local_hostname:-}" = "" ]; then
-         error "${bold}${red}ERROR ${BASH_SOURCE[0]}: Running command 'hostname' returned empty output. See above.${reset}"
-      fi
-      true "${bold}${cyan}INFO: File /etc/hostname did not exist. Writing ${local_hostname} to /etc/hostname, ok.${reset}"
-      printf '%s\n' "${local_hostname}" | ${SUDO_TO_ROOT} tee -- /etc/hostname >/dev/null
-   fi
-   if ! test -r /etc/hostname ; then
-      error "${bold}${red}ERROR ${BASH_SOURCE[0]}: /etc/hostname unreadable on the build system!${reset}"
-   fi
-   local build_system_hostname
-   if ! build_system_hostname=$(cat -- /etc/hostname) ; then
-      error "${bold}${red}ERROR ${BASH_SOURCE[0]}: /etc/hostname reading failed the build system!${reset}"
-   fi
-   if [ "${build_system_hostname:-}" = "" ]; then
-      error "${bold}${red}ERROR ${BASH_SOURCE[0]}: /etc/hostname file is empty on build system!${reset}"
-   fi
-   true "INFO: /etc/hostname check ok."
-}
-
-check-mailname() {
-   ## Silence noisy pbuilder warning:
-   ## W: No local /etc/mailname to copy, relying on /var/cache/pbuilder/cow.cow_amd64/cow.950654/etc/mailname to be correct
-   if ! test -f /etc/mailname ; then
-      true "INFO: File /etc/mailname did not exist. Creating empty one...."
-      ${SUDO_TO_ROOT} touch /etc/mailname
-   fi
-}
-
 check-source-folder-permissions() {
    ## Debugging.
    true "${bold}${cyan}INFO: PWD: ${PWD} ${reset}"
@@ -286,41 +241,56 @@ check-sufficient-disk() {
 }
 
 check-stray-loop-devices() {
-   true "INFO: Checking for stray loop devices..."
+   true "INFO: Checking for stray loop devices in build lane '${binary_build_folder_dist}'..."
 
-   local losetup_output
-   losetup_output=$(${SUDO_TO_ROOT} losetup --all)
+   local backing_file stray_output lane_prefix
 
-   if [ "${losetup_output:-}" = "" ]; then
-      true "INFO: Output of losetup_output is empty. No stray loop devices, OK."
+   ## Only a loop device backing a file inside THIS build's lane
+   ## (binary_build_folder_dist) is our concern - it indicates a previously broken or
+   ## aborted build of ours. Ignore /var/swapfile and loop devices owned by other
+   ## concurrent build lanes (different --build-slot), which are legitimate and not
+   ## ours to clean up. Read the backing file from losetup's STRUCTURED BACK-FILE
+   ## column (one per line), NOT by parsing the '(...)' of 'losetup --all': the column
+   ## is just the path (plus a ' (deleted)' suffix to strip), so a '(deleted)'/'(lost)'
+   ## node or a '(' in the path cannot corrupt it. Best-effort prefix match (this is an
+   ## informational hint, the function never errors): the no-slot default lane is the
+   ## shared derivative-binary root, so a concurrent slotted lane's loop may still match
+   ## it there, and a symlinked HOMEVAR is not canonicalized.
+   lane_prefix="${binary_build_folder_dist%/}"
+   stray_output=""
+   while IFS= read -r backing_file; do
+      [ -n "${backing_file}" ] || continue
+      backing_file="${backing_file% (deleted)}"
+      case "${backing_file}" in
+         "${lane_prefix}"/*)
+            stray_output+="${backing_file}
+"
+            ;;
+      esac
+   done < <(${SUDO_TO_ROOT} losetup --list --output BACK-FILE --noheadings 2>/dev/null)
+
+   if [ -z "${stray_output}" ]; then
+      true "INFO: No stray loop devices in this build lane, OK."
       return 0
    fi
 
-   ## TODO: ignore /var/swapfile loop device
-   ## losetup_output:
-   ## /dev/loop0: [64769]:2097454 (/var/swapfile)
+   true "INFO: Stray loop devices detected in this build lane!
 
-   true "INFO: Stray loop devices detected!
+stray_output: '${stray_output}'
 
-losetup_output: '${losetup_output}'
+To reproduce this manually, run:
 
-This has been detected by the following command... To reproduce this manually, run...
+sudo losetup --all ; echo \$?
 
-sudo losetup --all ; echo $?
-
-expected result:
-0
-
-In other words, this build script as currently implemented expects that there are no open loop devices.
-'sudo losetup --all' should not have any output and exit with exit code 0.
-
-If there is a legitimate loop device, this message can be ignored.
+These loop devices back files under this build's lane
+'${binary_build_folder_dist}', so they are most likely leftovers from a
+previously broken or aborted build of ours.
 
 Potential causes:
 - A previously broken or aborted build might result in a stray loop device.
 
 Recommendation:
-- Reboot. Often a reboot is required to get rid of the stray loop device."
+- Tear down the stray loop (kpartx -d, losetup --detach), or reboot."
 
    true
 }
@@ -409,19 +379,45 @@ check-stale-nbd() {
 check-stray-mounts() {
    true "INFO: Checking for mounts..."
 
-   local chroot_folder_base_name proc_mounts_grep_result
+   local chroot_canon mount_point proc_mounts_grep_result
 
    if [ "${CHROOT_FOLDER:-}" = "" ]; then
       true "INFO: CHROOT_FOLDER variable is empty (probably --target root). Skip test for stray mounts, OK."
       return 0
    fi
 
-   chroot_folder_base_name="$(basename "${CHROOT_FOLDER}")"
+   ## Canonicalize (resolve symlink components, strip a trailing slash) so the match is
+   ## against the kernel-canonical mount-point path recorded in /proc/mounts, regardless
+   ## of how CHROOT_FOLDER happened to be spelled. '-m' tolerates a not-yet-existing path.
+   chroot_canon="$(realpath -m -- "${CHROOT_FOLDER}")"
 
-   proc_mounts_grep_result=$(${SUDO_TO_ROOT} cat /proc/mounts | grep -i -- "${chroot_folder_base_name}") || true
+   ## /proc/mounts octal-escapes space, tab, newline and backslash in the mount-point field. Compare
+   ## field 2 VERBATIM and require the chroot path to be free of exactly those four, so an escaped
+   ## mount is never missed (fail-open). Check BOTH: the raw CHROOT_FOLDER (command substitution
+   ## stripped any trailing newline from chroot_canon) AND the canonical path (a symlink can resolve
+   ## to such a character even when the spelling is clean). Only the kernel-escaped set -- CR/VT/FF
+   ## are not escaped, so a verbatim compare matches them and they must not abort. Fail CLOSED; a
+   ## normal build never produces such a path (HOMEVAR, the slug and the flavor VMNAME are all plain).
+   if [[ "${CHROOT_FOLDER}" == *[$' \t\n\\']* || "${chroot_canon}" == *[$' \t\n\\']* ]]; then
+      error "${BASH_SOURCE[0]}: CHROOT_FOLDER must not contain a space, tab, newline or backslash (it is matched verbatim against /proc/mounts, which octal-escapes those). CHROOT_FOLDER: '${CHROOT_FOLDER}' canonical: '${chroot_canon}'"
+   fi
+
+   ## Match the FULL lane-specific CHROOT_FOLDER ("${binary_build_folder_dist}/${VMNAME}_image")
+   ## EXACTLY, or a mount strictly BELOW it -- never a bare substring. A substring grep would
+   ## (a) flag a CONCURRENT lane whose basename ("Kicksecure-CLI_image") is identical, aborting
+   ## this build, and (b) false-match a sibling whose path merely starts with ours
+   ## ("..._image_extra"). Field 2 is the mount point; the reject above guarantees it is escape-free.
+   proc_mounts_grep_result=""
+   while read -r _ mount_point _; do
+      case "${mount_point}" in
+         "${chroot_canon}"|"${chroot_canon}"/*)
+            proc_mounts_grep_result+="${mount_point}"$'\n'
+            ;;
+      esac
+   done < <(${SUDO_TO_ROOT} cat /proc/mounts)
 
    if [ "${proc_mounts_grep_result:-}" = "" ]; then
-      true "INFO: Output of proc_mounts_grep_result is empty. No stray mounts, OK."
+      true "INFO: No stray mounts at or below '${chroot_canon}', OK."
       return 0
    fi
 
@@ -429,12 +425,13 @@ check-stray-mounts() {
 
 proc_mounts_grep_result: '${proc_mounts_grep_result}'
 
-This has been detected by the following command... To reproduce this manually, run...
+This has been detected by scanning /proc/mounts for the build chroot. To reproduce
+this manually, run (prints each mount at or below the build chroot)...
 
-sudo cat /proc/mounts | grep '${CHROOT_FOLDER}' ; echo $?
+sudo awk -v p=\"\$(realpath -m '${CHROOT_FOLDER}')\" '\$2==p || index(\$2, p\"/\")==1 {print \$2}' /proc/mounts
 
 expected result:
-1
+(no output)
 
 Potential causes:
 - A previously broken or aborted build might result in a stray mount.
@@ -484,13 +481,56 @@ this stage; skipping dm/loop self-test.${reset}"
       return 0
    fi
 
-   ## Check for stale loop partition device-mapper devices.
-   local stale_dm
-   stale_dm="$(${SUDO_TO_ROOT} dmsetup ls 2>/dev/null | grep -E '^loop[0-9]+p[0-9]+' || true)"
+   ## Check for stale loop-partition device-mapper devices. A global
+   ## 'dmsetup ls | grep loopNpM' would also match a CONCURRENT build lane's live
+   ## mapping and fatally abort this build, so a BACKED mapping is treated as FATAL only
+   ## when its backing file is inside THIS lane (binary_build_folder_dist). Map loopNpM ->
+   ## /dev/loopN -> its structured BACK-FILE column -> lane prefix.
+   ##
+   ## An ORPHANED mapping (its /dev/loopN detached / gone, so BACK-FILE is empty) cannot be
+   ## attributed to any lane, so it is only WARNED about, never fatal: on a SHARED build host
+   ## a fatal abort here would (a) defeat lane isolation (kill this build over host-wide state
+   ## that is not ours) and (b) over-abort if the losetup query merely FAILED transiently or the
+   ## loop lives in another mount namespace -- in both of which BACK-FILE also reads empty. The
+   ## lane-backed fatal check and mount-test's own per-image self-test below cover the real risk.
+   local stale_dm orphan_dm dm_name loop_dev dm_back
+   stale_dm=""
+   orphan_dm=""
+   while read -r dm_name _; do
+      case "${dm_name}" in
+         loop[0-9]*p[0-9]*)
+            ;;
+         *)
+            continue
+            ;;
+      esac
+      ## Strip only the trailing partition suffix (pN): '%p*' (shortest match), NOT '%%p*',
+      ## which would cut at the 'p' in "loop" ("loop5p1" -> "loo").
+      loop_dev="/dev/${dm_name%p*}"
+      dm_back="$(${SUDO_TO_ROOT} losetup --list --output BACK-FILE --noheadings -- "${loop_dev}" 2>/dev/null || true)"
+      dm_back="${dm_back% (deleted)}"
+      ## Trim the whitespace losetup pads the column with, so a backing-less device
+      ## (query returned nothing / only blanks) tests as truly empty below.
+      dm_back="${dm_back#"${dm_back%%[![:space:]]*}"}"
+      dm_back="${dm_back%"${dm_back##*[![:space:]]}"}"
+      if [ -z "${dm_back}" ]; then
+         orphan_dm+="${dm_name} (no backing loop device)"$'\n'
+         continue
+      fi
+      case "${dm_back}" in
+         "${binary_build_folder_dist%/}"/*)
+            stale_dm+="${dm_name} (${dm_back})"$'\n'
+            ;;
+      esac
+   done < <(${SUDO_TO_ROOT} dmsetup ls 2>/dev/null || true)
+   if [ -n "${orphan_dm}" ]; then
+      true "${bold}${cyan}INFO ${BASH_SOURCE[0]}: orphaned loop-partition mapping(s) with no backing loop device (not this lane; not fatal -- may be another lane's teardown, a transient losetup failure, or a foreign mount namespace):
+${orphan_dm}If a build later fails on device-mapper, tear these down (kpartx -d / dmsetup remove) or reboot.${reset}"
+   fi
    if [ -n "${stale_dm}" ]; then
-      error "${bold}${red}ERROR ${BASH_SOURCE[0]}: stale device-mapper loop partition mapping(s) present:
+      error "${bold}${red}ERROR ${BASH_SOURCE[0]}: stale device-mapper loop partition mapping(s) present in this build lane:
 ${stale_dm}
-Recommendation: reboot the build host to clear them, then retry.${reset}"
+Recommendation: tear them down (kpartx -d / dmsetup remove), or reboot the build host, then retry.${reset}"
    fi
 
    ## Create a minimal, partitioned test image.
@@ -668,65 +708,81 @@ ${help_text}"
    true
 }
 
-install_required_packages() {
-   ## XXX: Ideally this would happen in a different script without
-   ##       "sanity-tests" in its name.
+check-required-packages-present() {
+   ## Read-only sanity check: the early build dependencies must already be
+   ## installed. They are installed by 'build-steps.d/1050_early-build-setup'
+   ## (which sorts before this step) from the single-source list
+   ## '$dist_build_early_dependencies' in 'variables.d/60_dependencies.bsh'. This
+   ## step only VERIFIES presence; it never installs -- a missing tool means 1050
+   ## did not run or failed. mount-test below needs kpartx/parted; 1200's
+   ## approx_proxy_setup needs approx.
+   local required_package_item missing_list=""
 
-   ## Using the build system's already exiting APT sources list.
-   ## As configured by the local system administrator.
-   ##
-   ## Not using the following command line options:
-   #-o Dir::Etc::sourcelist="$dist_build_sources_list_primary" \
-   #-o Dir::Etc::sourceparts="-" \
-   ## Because dist_build_sources_list_primary requires approx.
-
-   ${SUDO_TO_ROOT} \
-      apt-get \
-         "${DIST_APTGETOPT_WITHOUT_APT_CACHE[@]}" \
-         update
-
+   ## 'pkg_installed' (helper-scripts) is the single blessed installed-check;
+   ## do not hand-roll dpkg-query here.
    # shellcheck disable=SC2086
-   ${SUDO_TO_ROOT} \
-      apt-get \
-         "${DIST_APTGETOPT_WITHOUT_APT_CACHE[@]}" \
-         ${apt_unattended_opts} \
-         --no-install-recommends \
-         --yes \
-         install \
-         ${required_packages_list}
-}
-
-check_required_packages_installed() {
-   required_packages_list="git time curl approx lsb-release fakeroot fasttrack-archive-keyring safe-rm gpg-sq kmod qemu-utils kpartx parted"
-   local required_package_item
-
-   # shellcheck disable=SC2086
-   for required_package_item in ${required_packages_list} ; do
-      ## 'dpkg-query' does not exit non-zero if package is absent on the system.
-      if [ "$(dpkg-query --show --showformat='${Version}' "${required_package_item}")" = "" ] ; then
-         true "INFO: Required package '${required_package_item}' missing."
-         install_required_packages
-         break
+   for required_package_item in ${dist_build_early_dependencies} ; do
+      if ! pkg_installed "${required_package_item}" ; then
+         missing_list+="${required_package_item} "
       fi
    done
+
+   if [ -n "${missing_list}" ]; then
+      error "\
+Required early build dependencies are missing: ${missing_list}
+
+These are installed by 'build-steps.d/1050_early-build-setup', which runs before
+this step in a full build. Run the full build, or run that step first. Do not
+install them by hand piecemeal -- the single source of truth is
+'\$dist_build_early_dependencies' in 'variables.d/60_dependencies.bsh'."
+   fi
+
+   true "INFO: all early build dependencies present, ok."
 }
 
 main() {
+   set -x
+   set -o errexit
+   set -o nounset
+   set -o pipefail
+   set -o errtrace
+   shopt -s inherit_errexit
+   shopt -s shift_verbose
+   export LC_ALL=C
+
+   true "INFO: Currently running script: ${BASH_SOURCE[0]} $*"
+
+   local MYDIR
+   MYDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+   cd "${MYDIR}"
+   cd ..
+   cd help-steps
+   source pre
+   source variables
+   cd "${MYDIR}"
+   cd ..
+   # shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/has.bsh
+   source "${HELPER_SCRIPTS_PATH:-}"/usr/libexec/helper-scripts/has.bsh
+   # shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/package_installed_check.sh
+   source "${HELPER_SCRIPTS_PATH:-}"/usr/libexec/helper-scripts/package_installed_check.sh
+
    test-wc "$@"
    check-redistributable-builds-requirements "$@"
    check-git-folder "$@"
    check-operating-system-version "$@"
    check-sudo "$@"
    check-dpkg "$@"
-   check-hostname "$@"
-   check-mailname "$@"
    check-source-folder-permissions "$@"
    check-sufficient-disk "$@"
    check-stray-loop-devices "$@"
    check-umask-in-sync "$@"
    check-stale-nbd "$@"
    check-stray-mounts "$@"
-   check_required_packages_installed "$@"
+   ## Verify the early build dependencies are present (installed by
+   ## build-steps.d/1050_early-build-setup, which runs before this step) BEFORE
+   ## the checks below that USE them: mount-test invokes kpartx, and 1200's
+   ## approx_proxy_setup needs approx. Read-only -- never installs.
+   check-required-packages-present "$@"
    mount-test "$@"
    check-build-primitives "$@"
    check-copy-vms-into-raw "$@"
@@ -736,4 +792,8 @@ main() {
    true
 }
 
-main "$@"
+## Auto-run only when executed as a build step; a unit test sources this file to
+## call the check-* functions directly, so it must NOT run main().
+if was_executed "${BASH_SOURCE[0]}"; then
+   main "$@"
+fi
