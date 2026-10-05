@@ -151,10 +151,6 @@ dist_build_redistributable=true
 export dist_build_redistributable
 
 if [ "${dist_build_redistributable:-}" = "true" ]; then
-  ## The derivative APT repository is ENABLED by default for official/release builds
-  ## -- callers of dm-build-official pass NO '--repo'; the official default lives here.
-  ## Forwarded via build_args (each build step re-parses it), consistent with --tb /
-  ## --freedom below; parse-cmd makes --repo mandatory on a bare ./derivative-maker.
   build_args+=(--repo true)
   build_args+=(--tb closed)
   ## Install package 'firmware-nonfreedom' by default.
@@ -221,9 +217,8 @@ fi
 ## Phase 0: early build setup.
 ############################################################
 
-## Install the minimal early build dependencies the sanity tests themselves need
-## (mount-test: kpartx/parted) and 1200 needs (approx), BEFORE the per-flavor
-## sanity loop runs. Flavor-independent; invoked once like prepare-build-machine.
+## Install the minimal early build dependencies the sanity tests and build
+## machine prep needs.
 run_cmd ./build-steps.d/*_early-build-setup "${build_args[@]}" --target iso "${multi_target_args[@]}" --flavor source "$@"
 
 ############################################################
