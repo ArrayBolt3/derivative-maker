@@ -271,7 +271,11 @@ ${cyan}${bold}############################################################${rese
          "${output_cmd[@]}" "INFO: using non-interactive error handler."
          break
       else
-         if [ -t "0" ] && [ -t "1" ]; then
+         ## Only stdin must be connected to a terminal for the interactive
+         ## error handler to be functional. Devs may tee log output to a file
+         ## during an interactive build, so testing if stdout is connected to
+         ## a terminal breaks things.
+         if [ -t "0" ]; then
             "${output_cmd[@]}" "INFO: stdin and stdout connected to terminal, using interactive error handler."
             "${output_cmd[@]}" "\
 ${red}${bold}ERROR: An issue in ${under}$0${eunder} has been detected!${reset}
