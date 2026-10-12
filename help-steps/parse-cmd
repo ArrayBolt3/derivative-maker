@@ -3,6 +3,9 @@
 ## Copyright (C) 2012 - 2025 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
 
+## style-ok: no-strict -- 'pre' intentionally disables errexit, it must not be
+## turned back on.
+
 ## Intentional, throughout this file: a leading '$' on variables already in
 ## arithmetic context (e.g. $(( ${x} + 1 ))) is a harmless style choice.
 # shellcheck disable=SC2004
@@ -10,7 +13,7 @@
 # shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/check_runtime.bsh
 
 #set -x
-set -o errexit
+#set -o errexit
 set -o nounset
 set -o pipefail
 set -o errtrace
