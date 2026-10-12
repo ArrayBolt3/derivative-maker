@@ -7,9 +7,7 @@
 
 ## style-ok: no-strict -- sourced fragment.
 
-## Dependencies for sanity tests and build system setup are intentionally not
-## located in this file, but are hardcoded in *_early-build-setup instead. They
-## cannot be customized by configuration by design.
+source "${source_code_folder_dist}"/help-steps/set-early-dependencies
 
 #dist_build_script_build_dependency_debian_backports+=" currently-none "
 

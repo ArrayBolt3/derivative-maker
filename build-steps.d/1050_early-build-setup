@@ -23,10 +23,6 @@ fi
 # shellcheck source=../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/package_installed_check.sh
 source "${DM_MYDIR}/../packages/kicksecure/helper-scripts/usr/libexec/helper-scripts/package_installed_check.sh"
 
-## HARDCODED. The early dependency list cannot be in variables.d as 'variables'
-## cannot be safely sourced here.
-dist_build_early_dependencies="git time curl approx lsb-release fakeroot fasttrack-archive-keyring safe-rm gpg-sq kmod qemu-utils kpartx parted"
-
 ## Without 'pre' there is no error handler, but retry_run needs one.
 error() {
    printf '%s\n' "$0: ERROR: $*" >&2
@@ -35,6 +31,8 @@ error() {
 
 # shellcheck source=../help-steps/retry-run
 source "${DM_MYDIR}/../help-steps/retry-run"
+# shellcheck source=../help-steps/set-early-dependencies
+source "${DM_MYDIR}/../help-steps/set-early-dependencies"
 
 install_required_packages() {
    local required_package_item all_present="true"
